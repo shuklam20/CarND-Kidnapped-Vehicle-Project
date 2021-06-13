@@ -40,9 +40,9 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   for (int i = 0; i < num_particles; ++i) {
     Particle p;
     p.id = i;
-    p.x = dist_x;
-    p.y = dist_y;
-    p.theta = dist_theta;
+    p.x = dist_x(gen);
+    p.y = dist_y(gen);
+    p.theta = dist_theta(gen);
     p.weight = 1;
     particles.push_back(p);
   }
@@ -61,6 +61,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
   default_random_engine gen;
+  double p_x0, p_y0, p_theta0;
   double p_xf, p_yf, p_thetaf;
   for (int i = 0; i < num_particles; ++i) {
     p_x0 = particles[i].x;
@@ -109,9 +110,9 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
     for (int j = 0; j < predicted.size(); j++) {
       double pred_x = predicted[j].x;
       double pred_y = predicted[j].y;
-      double dist = dist(obs_x, obs_y, pred_x, pred_y); // helper_functions.h
-      if (dist < pseudo_dist) {
-        pseudo_dist = dist;
+      double distance = dist(obs_x, obs_y, pred_x, pred_y); // helper_functions.h
+      if (distance < pseudo_dist) {
+        pseudo_dist = distance;
         obs_id = predicted[j].id;
       }
     }
@@ -155,7 +156,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     vector<LandmarkObs> transformed_coords;
     for (int j = 0; j < observations.size(); j++) {
       double xm = cos(theta) * observations[j].x - sin(theta) * observations[j].y + particles[i].x;
-      double ym = sin(p_theta)*observations[j].x + cos(p_theta)*observations[j].y + particles[i].y;
+      double ym = sin(theta)*observations[j].x + cos(theta)*observations[j].y + particles[i].y;
       transformed_coords.push_back(LandmarkObs{observations[j].id, xm, ym});
     }
 
