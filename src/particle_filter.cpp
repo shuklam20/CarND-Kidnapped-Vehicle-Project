@@ -37,7 +37,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   normal_distribution<double> dist_y(y, std[1]); // normal (Gaussian) distribution for x
   normal_distribution<double> dist_theta(theta, std[2]); // normal (Gaussian) distribution for theta
 
-  for (int i = 0; i < num_particles; ++i) {
+  for (int i = 0; i < num_particles; i++) {
     Particle p;
     p.id = i;
     p.x = dist_x(gen);
@@ -61,32 +61,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
   default_random_engine gen;
-  double p_x0, p_y0, p_theta0;
-  double p_xf, p_yf, p_thetaf;
-  for (int i = 0; i < num_particles; ++i) {
-    p_x0 = particles[i].x;
-    p_y0 = particles[i].y;
-    p_theta0 = particles[i].theta;
+  normal_distribution<double> dist_x(0, std_pos[0]); // normal (Gaussian) distribution for x
+  normal_distribution<double> dist_y(0, std_pos[1]); // normal (Gaussian) distribution for x
+  normal_distribution<double> dist_theta(0, std_pos[2]); // normal (Gaussian) distribution for theta
 
-    if (fabs(yaw_rate) >= 0.00001) {
-      p_xf = p_x0 + (velocity / yaw_rate) * (sin(p_theta0 + (yaw_rate * delta_t)) - sin(p_theta0));
-      p_yf = p_y0 + (velocity / yaw_rate) * (cos(p_theta0) - cos(p_theta0 + (yaw_rate * delta_t)));
-      p_thetaf = p_theta0 + yaw_rate * delta_t;
+  for (int i = 0; i < num_particles; ++i) {
+    if (fabs(yaw_rate) >= 0.0001) {
+      particles[i].x += (velocity / yaw_rate) * (sin(particles[i].theta + (yaw_rate * delta_t)) - sin(particles[i].theta));
+      particles[i].y += (velocity / yaw_rate) * (cos(particles[i].theta) - cos(particles[i].theta + (yaw_rate * delta_t)));
+      particles[i].theta += yaw_rate * delta_t;
     }
     else {
-      p_xf = p_x0 + velocity * cos(p_theta0) * delta_t;
-      p_yf = p_y0 + velocity * sin(p_theta0) * delta_t;
-      p_thetaf = p_theta0;
+      particles[i].x += velocity * cos(particles[i].theta) * delta_t;
+      particles[i].y += velocity * sin(particles[i].theta) * delta_t;
     }
-
-    normal_distribution<double> dist_xf(p_xf, std_pos[0]); // normal (Gaussian) distribution for x
-    normal_distribution<double> dist_yf(p_yf, std_pos[1]); // normal (Gaussian) distribution for x
-    normal_distribution<double> dist_thetaf(p_thetaf, std_pos[2]); // normal (Gaussian) distribution for theta
-
     
-    particles[i].x = dist_xf(gen);
-    particles[i].y = dist_yf(gen);
-    particles[i].theta = dist_thetaf(gen);
+    particles[i].x += dist_x(gen);
+    particles[i].y += dist_y(gen);
+    particles[i].theta += dist_theta(gen);
   }
 }
 
@@ -101,13 +93,13 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
-  for (int i = 0; i < observations.size(); i++) { // For each observation point
+  for (unsigned int i = 0; i < observations.size(); i++) { // For each observation point
     double pseudo_dist = numeric_limits<double>::max();
     int obs_id = -1;
     double obs_x = observations[i].x;
     double obs_y = observations[i].y;
 
-    for (int j = 0; j < predicted.size(); j++) {
+    for (unsigned int j = 0; j < predicted.size(); j++) {
       double pred_x = predicted[j].x;
       double pred_y = predicted[j].y;
       double distance = dist(obs_x, obs_y, pred_x, pred_y); // helper_functions.h
@@ -140,39 +132,40 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     double theta = particles[i].theta;
 
     // vector to hold map landmark locations within sensor range
-    vector<LandmarkObs> predictions;
+    vector<LandmarkObs> pred;
 
-    for (int j = 0; j < map_landmarks.landmark_list.size(); j++) {
+    for (unsigned int j = 0; j < map_landmarks.landmark_list.size(); j++) {
       float landmark_x = map_landmarks.landmark_list[j].x_f;
       float landmark_y = map_landmarks.landmark_list[j].y_f;
       int landmark_id = map_landmarks.landmark_list[j].id_i;
       
       if (fabs(landmark_x - particles[i].x) <= sensor_range && fabs(landmark_y - particles[i].y) <= sensor_range) {
-        predictions.push_back(LandmarkObs{landmark_id, landmark_x, landmark_y});
+        pred.push_back(LandmarkObs{landmark_id, landmark_x, landmark_y});
       }
     }
 
     // Step 1: Transform from vehicle coordinates to map coordinates
     vector<LandmarkObs> transformed_coords;
-    for (int j = 0; j < observations.size(); j++) {
+    for (unsigned int j = 0; j < observations.size(); j++) {
       double xm = cos(theta) * observations[j].x - sin(theta) * observations[j].y + particles[i].x;
-      double ym = sin(theta)*observations[j].x + cos(theta)*observations[j].y + particles[i].y;
+      double ym = sin(theta)*observations[j].x + cos(theta) * observations[j].y + particles[i].y;
       transformed_coords.push_back(LandmarkObs{observations[j].id, xm, ym});
     }
 
     // Step 2: Associate each transformed observation with landmark identifier L1, L2,..... etc
-    dataAssociation(predictions, transformed_coords);
+    dataAssociation(pred, transformed_coords);
+    particles[i].weight = 1.0; // Reset weight to 1
 
     // Step 3: Calculate the multivariate Gaussian probability density for each observation
-    for (int j = 0; j < transformed_coords.size(); j++) {
+    for (unsigned int j = 0; j < transformed_coords.size(); j++) {
       double x, y;
       double mu_x = transformed_coords[j].x;
       double mu_y = transformed_coords[j].y;
 
-      for (int k = 0; k < predictions.size(); k++) {
-        if (predictions[k].id == transformed_coords[j].id) {
-          x = predictions[k].x;
-          y = predictions[k].y;
+      for (unsigned int k = 0; k < pred.size(); k++) {
+        if (pred[k].id == transformed_coords[j].id) {
+          x = pred[k].x;
+          y = pred[k].y;
         }
       } // end each prediction
 
